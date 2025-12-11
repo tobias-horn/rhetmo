@@ -43,6 +43,31 @@ function conversationToSession(conv: ApiConversationEntry): Session {
 }
 
 /**
+ * Fetch analysis for a specific conversation and merge into session
+ */
+async function enrichSessionWithAnalysis(session: Session, status: ApiConversationEntry['status']): Promise<Session> {
+  // Only fetch analysis for finished sessions
+  if (status !== 'finished') {
+    return session;
+  }
+
+  try {
+    const analysis = await fetchAnalyzedSession(session.id);
+    if (analysis) {
+      return {
+        ...session,
+        durationSec: analysis.metrics?.durationSec ?? 0,
+        analysis,
+      };
+    }
+  } catch (error) {
+    console.error(`Failed to fetch analysis for session ${session.id}:`, error);
+  }
+
+  return session;
+}
+
+/**
  * List all sessions - fetches from backend dynamic-handler
  */
 export async function listSessions(): Promise<Session[]> {
@@ -52,19 +77,26 @@ export async function listSessions(): Promise<Session[]> {
   if (USE_BACKEND) {
     try {
       const conversations = await fetchAllConversations();
-      const backendSessions = conversations.map(conversationToSession);
-      sessions.push(...backendSessions.map(withDerivedMetrics));
+      
+      // Convert to sessions and fetch analysis for finished ones (in parallel)
+      const backendSessions = await Promise.all(
+        conversations.map(async (conv) => {
+          const session = conversationToSession(conv);
+          const enrichedSession = await enrichSessionWithAnalysis(session, conv.status);
+          return withDerivedMetrics(enrichedSession);
+        })
+      );
+      
+      sessions.push(...backendSessions);
     } catch (error) {
       console.error('Failed to fetch conversations:', error);
     }
   }
 
-  // Add mock sessions for development/testing (only if no backend sessions)
-  if (sessions.length === 0) {
-    await delay();
-    const mockSessions = MOCK_SESSIONS.map(withDerivedMetrics);
-    sessions.push(...mockSessions);
-  }
+  // Always add mock sessions for development/testing
+  await delay();
+  const mockSessions = MOCK_SESSIONS.map(withDerivedMetrics);
+  sessions.push(...mockSessions);
 
   // Sort by creation date (newest first)
   return sessions.sort((a, b) => 
@@ -84,9 +116,8 @@ export async function fetchSessionById(id: string): Promise<Session | undefined>
       const conv = conversations.find(c => c.conversation_id === id);
       
       if (conv) {
-        // Found in backend - get full details
-        // Use quick-handler for analysis data (currently returns latest, may need backend update)
-        const analysis = await fetchAnalyzedSession();
+        // Found in backend - get full details using conversation_id
+        const analysis = await fetchAnalyzedSession(id);
         
         const date = new Date(conv.timestamp * 1000);
         const session: Session = {

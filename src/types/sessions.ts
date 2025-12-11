@@ -77,10 +77,18 @@ export type SessionIssue = {
   tokenIds?: string[];
 };
 
+export type CoachingHighlight = {
+  type: 'strength' | 'improvement';
+  title: string;
+  detail: string;
+  severity?: TagSeverity;
+};
+
 export type SessionAnalysis = {
   segments: TranscriptSegment[];
   metrics: SessionMetricsSummary;
   issues: SessionIssue[];
+  coachingHighlights?: CoachingHighlight[];
 };
 
 export type SessionMode = 'practice' | 'live';

@@ -5,5 +5,6 @@ export {
   fetchAnalyzedSession, 
   checkRecordingStatus,
   fetchAllConversations,
+  deleteSession,
 } from './client';
 export type { ApiConversationEntry } from './client';

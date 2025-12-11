@@ -2,7 +2,7 @@
 // Handles communication with Supabase Edge Functions
 
 import { API_CONFIG, API_HEADERS } from './config';
-import type { Session, SessionAnalysis, TranscriptSegment, TranscriptToken, Tag, SessionMetricsSummary, SessionIssue } from '@/types/sessions';
+import type { Session, SessionAnalysis, TranscriptSegment, TranscriptToken, Tag, SessionMetricsSummary, SessionIssue, CoachingHighlight } from '@/types/sessions';
 
 // Raw API response types (may differ slightly from our internal types)
 interface ApiSegment {
@@ -52,10 +52,18 @@ interface ApiIssue {
   tokenIds?: string[];
 }
 
+interface ApiCoachingHighlight {
+  type: 'strength' | 'improvement';
+  title: string;
+  detail: string;
+  severity?: 'low' | 'medium' | 'high';
+}
+
 interface ApiAnalysis {
   segments: ApiSegment[];
   metrics?: ApiMetrics;
   issues?: ApiIssue[];
+  coachingHighlights?: ApiCoachingHighlight[];
 }
 
 // Live session response (quick-worker) - full session object
@@ -78,6 +86,7 @@ interface ApiAnalyzedSessionResponse {
   segments: ApiSegment[];
   metrics?: ApiMetrics;
   issues?: ApiIssue[];
+  coachingHighlights?: ApiCoachingHighlight[];
 }
 
 // Conversation list response (dynamic-handler)
@@ -181,6 +190,18 @@ function transformIssue(apiIssue: ApiIssue): SessionIssue {
 }
 
 /**
+ * Transform API coaching highlight to internal CoachingHighlight type
+ */
+function transformCoachingHighlight(apiHighlight: ApiCoachingHighlight): CoachingHighlight {
+  return {
+    type: apiHighlight.type,
+    title: apiHighlight.title,
+    detail: apiHighlight.detail,
+    severity: apiHighlight.severity,
+  };
+}
+
+/**
  * Transform full API analysis to internal SessionAnalysis type
  */
 function transformAnalysis(apiAnalysis: ApiAnalysis): SessionAnalysis {
@@ -188,6 +209,7 @@ function transformAnalysis(apiAnalysis: ApiAnalysis): SessionAnalysis {
     segments: apiAnalysis.segments.map(transformSegment),
     metrics: transformMetrics(apiAnalysis.metrics),
     issues: (apiAnalysis.issues ?? []).map(transformIssue),
+    coachingHighlights: apiAnalysis.coachingHighlights?.map(transformCoachingHighlight),
   };
 }
 
@@ -236,13 +258,18 @@ export async function fetchLiveSession(): Promise<Session | null> {
 /**
  * Fetch analyzed session data (completed analysis)
  * Uses quick-handler endpoint
+ * @param conversationId - Optional conversation ID to fetch specific session
  */
-export async function fetchAnalyzedSession(): Promise<SessionAnalysis | null> {
+export async function fetchAnalyzedSession(conversationId?: string): Promise<SessionAnalysis | null> {
   try {
+    const body = conversationId 
+      ? { conversation_id: conversationId }
+      : { name: 'Functions' };
+    
     const response = await fetch(`${API_CONFIG.baseUrl}/quick-handler`, {
       method: 'POST',
       headers: API_HEADERS,
-      body: JSON.stringify({ name: 'Functions' }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -256,6 +283,7 @@ export async function fetchAnalyzedSession(): Promise<SessionAnalysis | null> {
       segments: data.segments.map(transformSegment),
       metrics: transformMetrics(data.metrics),
       issues: (data.issues ?? []).map(transformIssue),
+      coachingHighlights: data.coachingHighlights?.map(transformCoachingHighlight),
     };
   } catch (error) {
     console.error('Error fetching analyzed session:', error);
@@ -300,6 +328,41 @@ export async function fetchAllConversations(): Promise<ApiConversationEntry[]> {
   } catch (error) {
     console.error('Error fetching conversations:', error);
     return [];
+  }
+}
+
+/**
+ * Delete a session/conversation by ID
+ */
+export async function deleteSession(conversationId: string): Promise<boolean> {
+  try {
+    console.log('Deleting session:', conversationId);
+    // Note: delete-function endpoint doesn't allow 'apikey' header in CORS
+    // Using only Authorization header
+    const response = await fetch(`${API_CONFIG.baseUrl}/delete-function`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${API_CONFIG.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        name: 'Functions',
+        conversation_id: conversationId 
+      }),
+    });
+
+    const responseText = await response.text();
+    console.log('Delete response:', response.status, responseText);
+
+    if (!response.ok) {
+      console.error('Failed to delete session:', response.status, response.statusText, responseText);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error deleting session:', error);
+    return false;
   }
 }
 

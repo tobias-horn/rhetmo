@@ -2,7 +2,12 @@ import { Activity } from 'lucide-react';
 import type { Session } from '@/types/sessions';
 import { SessionListItem } from './SessionListItem';
 
-export function SessionList({ sessions }: { sessions: Session[] }) {
+interface SessionListProps {
+  sessions: Session[];
+  onDelete?: (sessionId: string) => void;
+}
+
+export function SessionList({ sessions, onDelete }: SessionListProps) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 text-sm text-slate-300">
@@ -11,7 +16,7 @@ export function SessionList({ sessions }: { sessions: Session[] }) {
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         {sessions.map((session) => (
-          <SessionListItem key={session.id} session={session} />
+          <SessionListItem key={session.id} session={session} onDelete={onDelete} />
         ))}
       </div>
     </div>

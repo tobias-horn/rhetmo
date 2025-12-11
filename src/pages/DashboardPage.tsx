@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Flame, Plus } from 'lucide-react';
 import { AppShell } from '@/components/layout/AppShell';
 import { SessionList } from '@/components/sessions/SessionList';
 import { listSessions } from '@/data/sessions';
+import { deleteSession } from '@/api';
 import type { Session } from '@/types/sessions';
 
 export function DashboardPage() {
+  const navigate = useNavigate();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -33,12 +36,22 @@ export function DashboardPage() {
     return { readyCount: ready.length, fillerAvg, paceAvg };
   }, [sessions]);
 
+  const handleDeleteSession = async (sessionId: string) => {
+    const success = await deleteSession(sessionId);
+    if (success) {
+      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    }
+  };
+
   return (
     <AppShell
       title="Coaching sessions"
       subtitle="Practice and live sessions with analysis stitched from your phone and watch"
       actions={
-        <button className="inline-flex items-center gap-2 rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-soft transition hover:bg-emerald-400">
+        <button 
+          onClick={() => navigate('/practice')}
+          className="inline-flex items-center gap-2 rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-soft transition hover:bg-emerald-400"
+        >
           <Plus className="h-4 w-4" />
           New practice
         </button>
@@ -81,7 +94,7 @@ export function DashboardPage() {
       {loading ? (
         <div className="rounded-3xl border border-white/5 bg-white/5 p-6 text-slate-200">Loading sessions…</div>
       ) : (
-        <SessionList sessions={sessions} />
+        <SessionList sessions={sessions} onDelete={handleDeleteSession} />
       )}
     </AppShell>
   );
